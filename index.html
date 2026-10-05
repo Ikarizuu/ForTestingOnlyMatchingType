@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drag and Drop Reviewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .drop-zone {
+            min-height: 3rem;
+            transition: all 0.2s ease;
+        }
+        .drop-zone.drag-over {
+            background-color: #e2e8f0;
+            border-color: #64748b;
+        }
+        .draggable-item {
+            cursor: grab;
+            user-select: none;
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        .draggable-item:active {
+            cursor: grabbing;
+        }
+        .draggable-item.dragging {
+            opacity: 0.5;
+            transform: scale(0.98);
+        }
+        /* Custom scrollbar for long texts */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen pb-12">
+
+    <div class="max-w-6xl mx-auto px-4 pt-8">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+            <h1 class="text-2xl font-bold text-slate-900 mb-2">Matching Type Reviewer</h1>
+            <p class="text-slate-500 mb-4">Drag the choices from the bottom container to the matching drop zones next to each item.</p>
+            
+            <div class="flex items-center gap-4">
+                <label for="set-selector" class="font-medium">Select Question Set:</label>
+                <select id="set-selector" class="bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                    <option value="0">Part 1: Keyboard Shortcuts</option>
+                    <option value="1">Part 2: Graphics Concepts</option>
+                    <option value="2">Part 3: Design Tools</option>
+                </select>
+                <button id="reset-btn" class="ml-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors">
+                    Reset
+                </button>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-8">
+            
+            <!-- Left Column: Items and Dropzones -->
+            <div class="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Match each item to a choice:</h2>
+                <div id="items-container" class="space-y-4">
+                    <!-- Items will be injected here via JS -->
+                </div>
+                
+                <div class="mt-8 border-t pt-6 flex items-center justify-between">
+                    <button id="check-btn" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors">
+                        Check Answers
+                    </button>
+                    <div id="score-display" class="text-xl font-bold text-slate-800 hidden">
+                        Score: <span id="score-value">0</span> / <span id="score-total">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right/Bottom Column: Choices Bank -->
+            <div class="lg:w-1/3 w-full shrink-0">
+                <div class="bg-slate-100 rounded-xl border border-slate-200 p-5 sticky top-6">
+                    <h2 class="text-lg font-semibold mb-4 text-slate-700">Choices</h2>
+                    <div id="choices-container" class="drop-zone flex flex-col gap-3 min-h-[300px]">
+                        <!-- Choices will be injected here via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const quizData = [
+            {
+                // Set 2 from prompt (Keyboard shortcuts)
+                title: "Part 1",
+                pairs: [
+                    { item: "V", choice: "Selection" },
+                    { item: "M", choice: "Rectangle" },
+                    { item: "Y", choice: "Magic Wand" },
+                    { item: "Q", choice: "Lasso" },
+                    { item: "P", choice: "Pen" },
+                    { item: "T", choice: "Type" },
+                    { item: "L", choice: "Ellipse" },
+                    { item: "N", choice: "Pencil" },
+                    { item: "R", choice: "Rotate" },
+                    { item: "I", choice: "Eyedropper" }
+                ]
+            },
+            {
+                // Set 3 from prompt (Graphics concepts)
+                title: "Part 2",
+                pairs: [
+                    { item: "Pixel", choice: "Is the smallest screen elements." },
+                    { item: "Rasterization", choice: "The process of determining the appropriate pixels for representing picture or graphics object" },
+                    { item: "Scan Conversion", choice: "The process of representing continuous picture or graphics object as a collection of discrete pixels." },
+                    { item: "Presentation Graphics", choice: "In this application reports are generated on slides or transparencies." },
+                    { item: "Entertainment", choice: "It is used in making motion pictures, music, videos and television shows." },
+                    { item: "Icon", choice: "Is a graphics symbol designed to look like a processing options." },
+                    { item: "Auto Cad applications", choice: "These are design to create building, automobiles, aircraft, spacecraft, textiles and more models." },
+                    { item: "Virtual Reality", choice: "Provides a very realistic effect using sight and sound, while allowing the user to interact with the virtual world." },
+                    { item: "Telemedicine", choice: "In this application physician can consult with one another using video conferencing capabilities, where all can see the data and images, it brings together experts from a number of places in order to provide better care." },
+                    { item: "Image Processing", choice: "Converts an existing image into digitized form by converting the image file format." }
+                ]
+            },
+            {
+                // Set 1 from prompt (Design Tools)
+                title: "Part 3",
+                pairs: [
+                    { item: "Panels", choice: "Provide tools and options for specific design functions like color, layers, and properties, enhacing workflow efficiency." },
+                    { item: "Workspaces", choice: "Are predefined or custom arrangements of panels that suit various design workflows such as typography or painting." },
+                    { item: "Switching and Saving Workspaces", choice: "Users can switch between workspaces via dropdown menus and save custom layouts for future use to improve productivity." },
+                    { item: "Artboards", choice: "Serve as separate canvases within one document, allowing multiple design layouts in a single file." },
+                    { item: "Layers", choice: "Help organize complex artwork by grouping multiple objects for easy management and editing control." },
+                    { item: "Vector Graphics", choice: "Use mathematical paths, ensuring scalability without loss of quality." },
+                    { item: "Anchor points and paths", choice: "Can be manipulated to customize and refine vector shapes" },
+                    { item: "Fill Color Basics", choice: "Applies to the interior of vector shapes, defining their solid or gradient appearance." },
+                    { item: "Stroke", choice: "Defines the outline or border of shapes, adjustable by weight, style and color." },
+                    { item: "Swatches panel", choice: "Offers access to default color libraries and custom swatches for efficient color management." }
+                ]
+            }
+        ];
+
+        let currentDraggedItem = null;
+        const setSelector = document.getElementById('set-selector');
+        const itemsContainer = document.getElementById('items-container');
+        const choicesContainer = document.getElementById('choices-container');
+        const checkBtn = document.getElementById('check-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const scoreDisplay = document.getElementById('score-display');
+        const scoreValue = document.getElementById('score-value');
+        const scoreTotal = document.getElementById('score-total');
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function loadSet(index) {
+            const data = quizData[index];
+            itemsContainer.innerHTML = '';
+            choicesContainer.innerHTML = '';
+            scoreDisplay.classList.add('hidden');
+            
+            let choices = [];
+
+            data.pairs.forEach((pair, idx) => {
+                // Render Item row
+                const row = document.createElement('div');
+                row.className = 'flex flex-col sm:flex-row gap-3 items-stretch';
+                
+                // Item box
+                const itemBox = document.createElement('div');
+                itemBox.className = 'flex-1 bg-white border border-slate-300 rounded-lg p-4 flex items-center justify-center text-center shadow-sm';
+                itemBox.textContent = pair.item;
+                
+                // Drop zone
+                const dropZone = document.createElement('div');
+                dropZone.className = 'flex-1 border-2 border-dashed border-slate-300 rounded-lg p-2 flex items-center justify-center drop-zone bg-slate-50 min-h-[4rem] relative';
+                dropZone.dataset.correctAnswerId = `choice-${index}-${idx}`;
+                
+                row.appendChild(itemBox);
+                row.appendChild(dropZone);
+                itemsContainer.appendChild(row);
+
+                // Prepare Choice
+                choices.push({
+                    id: `choice-${index}-${idx}`,
+                    text: pair.choice
+                });
+            });
+
+            // Shuffle choices and render
+            choices = shuffleArray(choices);
+            choices.forEach(choice => {
+                const choiceEl = document.createElement('div');
+                choiceEl.className = 'draggable-item bg-white border border-slate-200 shadow-sm rounded-lg p-3 text-sm flex gap-2 items-start';
+                choiceEl.draggable = true;
+                choiceEl.id = choice.id;
+                
+                // Add a grab icon using a simple SVG
+                const iconSVG = `<svg class="w-5 h-5 text-slate-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>`;
+                
+                choiceEl.innerHTML = `${iconSVG} <span>${choice.text}</span>`;
+                choicesContainer.appendChild(choiceEl);
+            });
+
+            setupDragAndDrop();
+        }
+
+        function setupDragAndDrop() {
+            const draggables = document.querySelectorAll('.draggable-item');
+            const dropZones = document.querySelectorAll('.drop-zone');
+
+            draggables.forEach(draggable => {
+                draggable.addEventListener('dragstart', (e) => {
+                    draggable.classList.add('dragging');
+                    currentDraggedItem = draggable;
+                    // Required for Firefox
+                    e.dataTransfer.setData('text/plain', draggable.id); 
+                });
+
+                draggable.addEventListener('dragend', () => {
+                    draggable.classList.remove('dragging');
+                    currentDraggedItem = null;
+                });
+            });
+
+            dropZones.forEach(zone => {
+                zone.addEventListener('dragover', (e) => {
+                    e.preventDefault(); // allow drop
+                    zone.classList.add('drag-over');
+                });
+
+                zone.addEventListener('dragleave', () => {
+                    zone.classList.remove('drag-over');
+                });
+
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('drag-over');
+                    
+                    if (!currentDraggedItem) return;
+
+                    // If drop zone is not the choices container and already has an item, 
+                    // swap it back to the choices container first.
+                    if (zone.id !== 'choices-container' && zone.children.length > 0) {
+                        const existingItem = zone.children[0];
+                        choicesContainer.appendChild(existingItem);
+                    }
+                    
+                    // Append dragged item
+                    zone.appendChild(currentDraggedItem);
+                    
+                    // Reset styling in case it was previously checked
+                    currentDraggedItem.classList.remove('bg-green-100', 'border-green-500', 'bg-red-100', 'border-red-500');
+                    currentDraggedItem.classList.add('bg-white');
+                });
+            });
+        }
+
+        function checkAnswers() {
+            const dropZones = document.querySelectorAll('#items-container .drop-zone');
+            let score = 0;
+            const total = dropZones.length;
+
+            dropZones.forEach(zone => {
+                const correctId = zone.dataset.correctAnswerId;
+                const droppedItem = zone.firstElementChild;
+
+                // Reset zone border
+                zone.classList.remove('border-green-400', 'border-red-400', 'bg-green-50', 'bg-red-50');
+
+                if (droppedItem) {
+                    droppedItem.classList.remove('bg-white', 'bg-green-100', 'border-green-500', 'bg-red-100', 'border-red-500');
+                    
+                    if (droppedItem.id === correctId) {
+                        score++;
+                        droppedItem.classList.add('bg-green-100', 'border-green-500');
+                        zone.classList.add('border-green-400', 'bg-green-50');
+                    } else {
+                        droppedItem.classList.add('bg-red-100', 'border-red-500');
+                        zone.classList.add('border-red-400', 'bg-red-50');
+                    }
+                } else {
+                    zone.classList.add('border-red-400', 'bg-red-50');
+                }
+            });
+
+            scoreValue.textContent = score;
+            scoreTotal.textContent = total;
+            scoreDisplay.classList.remove('hidden');
+        }
+
+        setSelector.addEventListener('change', (e) => {
+            loadSet(parseInt(e.target.value));
+        });
+
+        checkBtn.addEventListener('click', checkAnswers);
+
+        resetBtn.addEventListener('click', () => {
+            loadSet(parseInt(setSelector.value));
+        });
+
+        // Initialize first set on load
+        loadSet(0);
+
+    </script>
+</body>
+</html>

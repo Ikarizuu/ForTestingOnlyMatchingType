@@ -3,115 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drag and Drop Reviewer</title>
+    <title>Hybrid Drag & Tap Reviewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
+            /* Prevent overscroll bounce on mobile to make drag/drop smoother */
+            overscroll-behavior-y: none; 
         }
+        
         .drop-zone {
-            min-height: 3rem;
+            min-height: 4rem;
             transition: all 0.2s ease;
         }
+        
         .drop-zone:not(#choices-container):empty::before {
-            content: 'Drop choice here';
+            content: 'Drop or Tap choice here';
             color: #94a3b8;
             font-size: 0.875rem;
             pointer-events: none;
+            position: absolute;
+            width: 100%;
+            text-align: center;
         }
+
         .drop-zone.drag-over {
             background-color: #e2e8f0;
             border-color: #64748b;
         }
+
         .draggable-item {
             cursor: grab;
             user-select: none;
-            touch-action: none; /* Prevents scrolling while dragging on mobile */
-            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            touch-action: pan-y; /* Allow vertical scrolling, but script handles tap/drag */
+            transition: transform 0.1s ease, box-shadow 0.1s ease, border-color 0.2s;
             width: 100%;
             box-sizing: border-box;
         }
+
         .draggable-item:active {
             cursor: grabbing;
         }
+
         .draggable-item.dragging {
             opacity: 0.5;
             transform: scale(0.98);
         }
-        /* Custom scrollbar for long texts */
-        ::-webkit-scrollbar {
-            width: 6px;
+        
+        .draggable-item.selected-for-tap {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5); /* Blue ring */
+            border-color: #3b82f6;
+            transform: scale(1.02);
+            z-index: 10;
         }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1; 
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
-        }
+
+        /* Custom scrollbar for mobile sticky choice box */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
-<body class="text-slate-800 min-h-screen pb-12">
+<body class="text-slate-800 min-h-screen pb-24 lg:pb-12 flex flex-col">
 
-    <div class="max-w-6xl mx-auto px-4 pt-8">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+    <div class="max-w-6xl mx-auto px-4 pt-6 w-full flex-grow flex flex-col">
+        <!-- Header & Controls -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6 shrink-0">
             <h1 class="text-2xl font-bold text-slate-900 mb-2">Matching Type Reviewer</h1>
-            <p class="text-slate-500 mb-4">Drag the choices from the bottom container to the matching drop zones next to each item.</p>
+            <p class="text-slate-500 mb-4 text-sm sm:text-base">
+                <strong>PC:</strong> Drag and drop the choices. <br class="sm:hidden" />
+                <strong>Mobile:</strong> Tap a choice to select it, then tap an empty box to place it.
+            </p>
             
-            <div class="flex items-center gap-4">
-                <label for="set-selector" class="font-medium">Select Question Set:</label>
-                <select id="set-selector" class="bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+            <div class="flex items-center gap-3">
+                <select id="set-selector" class="bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 w-full sm:w-auto">
                     <option value="0">Part 1: Keyboard Shortcuts</option>
                     <option value="1">Part 2: Graphics Concepts</option>
                     <option value="2">Part 3: Design Tools</option>
                 </select>
-                <button id="reset-btn" class="ml-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors">
-                    Reset
+                <button id="reset-btn" class="ml-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors shadow-sm">
+                    Reset Board
                 </button>
             </div>
         </div>
 
-        <div class="flex flex-col lg:flex-row gap-8">
+        <div class="flex flex-col lg:flex-row gap-6 relative flex-grow">
             
             <!-- Left Column: Items and Dropzones -->
-            <div class="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Match each item to a choice:</h2>
-                <div id="items-container" class="space-y-4">
-                    <!-- Items will be injected here via JS -->
+            <div class="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 mb-4 lg:mb-0">
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2 text-slate-700">Match each item to a choice:</h2>
+                <div id="items-container" class="space-y-3">
+                    <!-- Items injected via JS -->
                 </div>
                 
-                <div class="mt-8 border-t pt-6 flex items-center justify-between">
-                    <button id="check-btn" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors">
-                        Check Answers
-                    </button>
-                    <div id="score-display" class="text-xl font-bold text-slate-800 hidden">
-                        Score: <span id="score-value">0</span> / <span id="score-total">0</span>
+                <!-- Action Buttons -->
+                <div class="mt-8 border-t border-slate-200 pt-6 flex flex-col sm:flex-row items-center gap-4 justify-between">
+                    <div class="flex gap-3 w-full sm:w-auto">
+                        <button id="check-btn" class="flex-1 sm:flex-none px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition-colors text-center">
+                            Check Answers
+                        </button>
+                        <button id="next-btn" class="flex-1 sm:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg shadow-sm transition-colors text-center">
+                            Next Question
+                        </button>
+                    </div>
+                    <div id="score-display" class="text-xl font-bold text-slate-800 bg-slate-100 px-4 py-2 rounded-lg hidden w-full sm:w-auto text-center">
+                        Score: <span id="score-value" class="text-blue-600">0</span> / <span id="score-total">0</span>
                     </div>
                 </div>
             </div>
 
             <!-- Right/Bottom Column: Choices Bank -->
-            <div class="lg:w-1/3 w-full shrink-0">
-                <div class="bg-slate-100 rounded-xl border border-slate-200 p-5 lg:sticky lg:top-6">
-                    <h2 class="text-lg font-semibold mb-4 text-slate-700">Choices</h2>
-                    <div id="choices-container" class="drop-zone flex flex-col gap-3 min-h-[300px]">
-                        <!-- Choices will be injected here via JS -->
+            <div class="lg:w-1/3 w-full shrink-0 fixed bottom-0 left-0 right-0 z-50 lg:static lg:z-auto">
+                <div class="bg-slate-100 rounded-t-2xl lg:rounded-xl border-t lg:border border-slate-300 p-4 shadow-[0_-5px_15px_-3px_rgba(0,0,0,0.15)] lg:shadow-sm lg:sticky lg:top-6">
+                    <h2 class="text-lg font-semibold mb-3 text-slate-800 flex justify-between items-center">
+                        Choices Bank 
+                        <span class="text-xs font-normal text-slate-500 bg-slate-200 px-2 py-1 rounded-md hidden lg:inline-block">Drag items from here</span>
+                        <span class="text-xs font-normal text-slate-500 bg-slate-200 px-2 py-1 rounded-md lg:hidden">Tap to select</span>
+                    </h2>
+                    <!-- Fixed max-height on mobile to keep it out of the way, scrolling internally -->
+                    <div id="choices-container" class="drop-zone flex flex-col gap-2 max-h-[35vh] lg:max-h-[60vh] overflow-y-auto p-1 pb-4">
+                        <!-- Choices injected via JS -->
                     </div>
                 </div>
             </div>
+            
         </div>
     </div>
 
     <script>
         const quizData = [
             {
-                // Set 2 from prompt (Keyboard shortcuts)
-                title: "Part 1",
+                // Set 1 (Part 1 from prompt)
+                title: "Part 1: Keyboard Shortcuts",
                 pairs: [
                     { item: "V", choice: "Selection" },
                     { item: "M", choice: "Rectangle" },
@@ -126,8 +151,8 @@
                 ]
             },
             {
-                // Set 3 from prompt (Graphics concepts)
-                title: "Part 2",
+                // Set 2 (Part 2 from prompt)
+                title: "Part 2: Graphics Concepts",
                 pairs: [
                     { item: "Pixel", choice: "Is the smallest screen elements." },
                     { item: "Rasterization", choice: "The process of determining the appropriate pixels for representing picture or graphics object" },
@@ -142,8 +167,8 @@
                 ]
             },
             {
-                // Set 1 from prompt (Design Tools)
-                title: "Part 3",
+                // Set 3 (Part 3 from prompt)
+                title: "Part 3: Design Tools",
                 pairs: [
                     { item: "Panels", choice: "Provide tools and options for specific design functions like color, layers, and properties, enhacing workflow efficiency." },
                     { item: "Workspaces", choice: "Are predefined or custom arrangements of panels that suit various design workflows such as typography or painting." },
@@ -159,11 +184,15 @@
             }
         ];
 
-        let currentDraggedItem = null;
+        let currentSetIndex = 0;
+        let activeTappedItem = null; // Tracks currently selected item for mobile tap-to-place
+        let isDragging = false; // Flag to prevent tap events firing right after drag drops
+        
         const setSelector = document.getElementById('set-selector');
         const itemsContainer = document.getElementById('items-container');
         const choicesContainer = document.getElementById('choices-container');
         const checkBtn = document.getElementById('check-btn');
+        const nextBtn = document.getElementById('next-btn');
         const resetBtn = document.getElementById('reset-btn');
         const scoreDisplay = document.getElementById('score-display');
         const scoreValue = document.getElementById('score-value');
@@ -178,78 +207,146 @@
         }
 
         function loadSet(index) {
+            currentSetIndex = index;
+            setSelector.value = index;
+            
             const data = quizData[index];
             itemsContainer.innerHTML = '';
             choicesContainer.innerHTML = '';
             scoreDisplay.classList.add('hidden');
+            activeTappedItem = null;
             
             let choices = [];
 
             data.pairs.forEach((pair, idx) => {
-                // Render Item row
+                // Main Row
                 const row = document.createElement('div');
-                row.className = 'flex flex-col sm:flex-row gap-3 items-stretch';
+                row.className = 'flex flex-col sm:flex-row gap-2 sm:gap-4 items-stretch';
                 
-                // Item box
+                // Static Item Box
                 const itemBox = document.createElement('div');
-                itemBox.className = 'flex-1 bg-white border border-slate-300 rounded-lg p-4 flex items-center justify-center text-center shadow-sm';
+                itemBox.className = 'flex-1 bg-white border border-slate-300 rounded-lg p-3 sm:p-4 flex items-center justify-center text-center shadow-sm font-medium text-slate-800';
                 itemBox.textContent = pair.item;
                 
-                // Drop zone
+                // Drop Zone wrapper
+                const dropZoneWrapper = document.createElement('div');
+                dropZoneWrapper.className = 'flex-1 flex flex-col relative';
+                
+                // Drop Zone
                 const dropZone = document.createElement('div');
-                dropZone.className = 'flex-1 border-2 border-dashed border-slate-300 rounded-lg p-2 flex items-center justify-center drop-zone bg-slate-50 min-h-[4rem] relative';
+                dropZone.className = 'drop-zone flex-1 border-2 border-dashed border-slate-300 bg-slate-50 rounded-lg p-1.5 flex items-center justify-center relative cursor-pointer hover:bg-slate-100 transition-colors';
                 dropZone.dataset.correctAnswerId = `choice-${index}-${idx}`;
                 
+                dropZoneWrapper.appendChild(dropZone);
                 row.appendChild(itemBox);
-                row.appendChild(dropZone);
+                row.appendChild(dropZoneWrapper);
                 itemsContainer.appendChild(row);
 
-                // Prepare Choice
-                choices.push({
-                    id: `choice-${index}-${idx}`,
-                    text: pair.choice
-                });
+                choices.push({ id: `choice-${index}-${idx}`, text: pair.choice });
             });
 
-            // Shuffle choices and render
+            // Render Choices (Shuffled)
             choices = shuffleArray(choices);
             choices.forEach(choice => {
                 const choiceEl = document.createElement('div');
-                choiceEl.className = 'draggable-item bg-white border border-slate-200 shadow-sm rounded-lg p-3 text-sm flex gap-2 items-start';
+                // Base styles. (We use bg-white text-slate-700 for neutral un-evaluated state)
+                choiceEl.className = 'draggable-item bg-white border border-slate-200 text-slate-700 shadow-sm rounded-lg p-3 text-sm flex gap-3 items-center hover:bg-slate-50';
                 choiceEl.draggable = true;
                 choiceEl.id = choice.id;
                 
-                // Add a grab icon using a simple SVG
-                const iconSVG = `<svg class="w-5 h-5 text-slate-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>`;
-                
-                choiceEl.innerHTML = `${iconSVG} <span>${choice.text}</span>`;
+                const iconSVG = `<svg class="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>`;
+                choiceEl.innerHTML = `${iconSVG} <span class="leading-snug">${choice.text}</span>`;
                 choicesContainer.appendChild(choiceEl);
             });
 
-            setupDragAndDrop();
+            setupInteractions();
         }
 
-        function setupDragAndDrop() {
+        // CRITICAL FIX: This function removes red/green validation colors, 
+        // returning the item and zone back to a neutral state.
+        function clearValidationVisuals(item, zone) {
+            if (item) {
+                item.classList.remove('bg-green-100', 'border-green-500', 'text-green-900', 'bg-red-100', 'border-red-500', 'text-red-900');
+                item.classList.add('bg-white', 'border-slate-200', 'text-slate-700');
+            }
+            if (zone) {
+                zone.classList.remove('border-green-400', 'bg-green-50', 'border-red-400', 'bg-red-50');
+                if (zone.id !== 'choices-container') {
+                    zone.classList.add('border-slate-300', 'bg-slate-50');
+                }
+            }
+        }
+
+        // Reusable function to handle moving an item into a zone
+        function moveItemToZone(item, targetZone) {
+            const sourceZone = item.parentElement;
+            if (sourceZone === targetZone) return;
+
+            // If targeting a drop zone (not the choice bank) that already has an item, swap it
+            if (targetZone.id !== 'choices-container' && targetZone.children.length > 0) {
+                const existingItem = targetZone.children[0];
+                choicesContainer.appendChild(existingItem);
+                clearValidationVisuals(existingItem, targetZone);
+            }
+            
+            targetZone.appendChild(item);
+            
+            // Whenever an item is moved, reset the validation colors of the item, 
+            // the zone it left, and the zone it entered.
+            clearValidationVisuals(item, targetZone);
+            clearValidationVisuals(null, sourceZone);
+            
+            // Hide the score if the user changes answers after checking
+            scoreDisplay.classList.add('hidden');
+        }
+
+        function setupInteractions() {
             const draggables = document.querySelectorAll('.draggable-item');
             const dropZones = document.querySelectorAll('.drop-zone');
 
+            // --- DRAG AND DROP SETUP ---
             draggables.forEach(draggable => {
                 draggable.addEventListener('dragstart', (e) => {
+                    isDragging = true;
+                    // Clear tap selection if drag starts
+                    if (activeTappedItem) {
+                        activeTappedItem.classList.remove('selected-for-tap');
+                        activeTappedItem = null;
+                    }
                     draggable.classList.add('dragging');
-                    currentDraggedItem = draggable;
-                    // Required for Firefox
                     e.dataTransfer.setData('text/plain', draggable.id); 
                 });
 
                 draggable.addEventListener('dragend', () => {
                     draggable.classList.remove('dragging');
-                    currentDraggedItem = null;
+                    // Small delay before allowing clicks to prevent touch conflict
+                    setTimeout(() => isDragging = false, 50); 
+                });
+
+                // --- TAP TO SELECT SETUP ---
+                draggable.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent triggering click on the parent drop-zone
+                    if (isDragging) return; 
+
+                    if (activeTappedItem === draggable) {
+                        // Deselect if tapping the already selected item
+                        draggable.classList.remove('selected-for-tap');
+                        activeTappedItem = null;
+                    } else {
+                        // Deselect previous, select new
+                        if (activeTappedItem) {
+                            activeTappedItem.classList.remove('selected-for-tap');
+                        }
+                        activeTappedItem = draggable;
+                        draggable.classList.add('selected-for-tap');
+                    }
                 });
             });
 
             dropZones.forEach(zone => {
+                // Drag Events
                 zone.addEventListener('dragover', (e) => {
-                    e.preventDefault(); // allow drop
+                    e.preventDefault(); 
                     zone.classList.add('drag-over');
                 });
 
@@ -260,23 +357,31 @@
                 zone.addEventListener('drop', (e) => {
                     e.preventDefault();
                     zone.classList.remove('drag-over');
+                    const draggedId = e.dataTransfer.getData('text/plain');
+                    const draggedItem = document.getElementById(draggedId);
                     
-                    if (!currentDraggedItem) return;
-
-                    // If drop zone is not the choices container and already has an item, 
-                    // swap it back to the choices container first.
-                    if (zone.id !== 'choices-container' && zone.children.length > 0) {
-                        const existingItem = zone.children[0];
-                        choicesContainer.appendChild(existingItem);
+                    if (draggedItem) {
+                        moveItemToZone(draggedItem, zone);
                     }
-                    
-                    // Append dragged item
-                    zone.appendChild(currentDraggedItem);
-                    
-                    // Reset styling in case it was previously checked
-                    currentDraggedItem.classList.remove('bg-green-100', 'border-green-500', 'bg-red-100', 'border-red-500');
-                    currentDraggedItem.classList.add('bg-white');
                 });
+
+                // --- TAP TO PLACE SETUP ---
+                zone.addEventListener('click', () => {
+                    // If an item is selected and user taps a zone, move it there
+                    if (activeTappedItem && !isDragging) {
+                        moveItemToZone(activeTappedItem, zone);
+                        activeTappedItem.classList.remove('selected-for-tap');
+                        activeTappedItem = null;
+                    }
+                });
+            });
+            
+            // Allow deselecting by clicking outside on the body
+            document.body.addEventListener('click', (e) => {
+                if (activeTappedItem && !e.target.closest('.draggable-item') && !e.target.closest('.drop-zone')) {
+                    activeTappedItem.classList.remove('selected-for-tap');
+                    activeTappedItem = null;
+                }
             });
         }
 
@@ -289,21 +394,28 @@
                 const correctId = zone.dataset.correctAnswerId;
                 const droppedItem = zone.firstElementChild;
 
-                // Reset zone border
-                zone.classList.remove('border-green-400', 'border-red-400', 'bg-green-50', 'bg-red-50');
+                // Ensure it's visually cleared before applying new validation state
+                clearValidationVisuals(droppedItem, zone);
 
                 if (droppedItem) {
-                    droppedItem.classList.remove('bg-white', 'bg-green-100', 'border-green-500', 'bg-red-100', 'border-red-500');
-                    
+                    // Item exists in zone
                     if (droppedItem.id === correctId) {
                         score++;
-                        droppedItem.classList.add('bg-green-100', 'border-green-500');
+                        // Apply Green Correct Styling
+                        droppedItem.classList.remove('bg-white', 'border-slate-200', 'text-slate-700');
+                        droppedItem.classList.add('bg-green-100', 'border-green-500', 'text-green-900');
+                        zone.classList.remove('border-slate-300', 'bg-slate-50');
                         zone.classList.add('border-green-400', 'bg-green-50');
                     } else {
-                        droppedItem.classList.add('bg-red-100', 'border-red-500');
+                        // Apply Red Incorrect Styling
+                        droppedItem.classList.remove('bg-white', 'border-slate-200', 'text-slate-700');
+                        droppedItem.classList.add('bg-red-100', 'border-red-500', 'text-red-900');
+                        zone.classList.remove('border-slate-300', 'bg-slate-50');
                         zone.classList.add('border-red-400', 'bg-red-50');
                     }
                 } else {
+                    // Empty zone highlighted red
+                    zone.classList.remove('border-slate-300', 'bg-slate-50');
                     zone.classList.add('border-red-400', 'bg-red-50');
                 }
             });
@@ -311,6 +423,11 @@
             scoreValue.textContent = score;
             scoreTotal.textContent = total;
             scoreDisplay.classList.remove('hidden');
+            
+            // SCROLL UP slightly on mobile so user sees the score
+            if (window.innerWidth < 1024) {
+               scoreDisplay.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }
 
         setSelector.addEventListener('change', (e) => {
@@ -319,8 +436,18 @@
 
         checkBtn.addEventListener('click', checkAnswers);
 
+        nextBtn.addEventListener('click', () => {
+            // Advance to next set and wrap around to beginning
+            let nextIndex = (currentSetIndex + 1) % quizData.length;
+            loadSet(nextIndex);
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
         resetBtn.addEventListener('click', () => {
-            loadSet(parseInt(setSelector.value));
+            // Reload the current set
+            loadSet(currentSetIndex);
         });
 
         // Initialize first set on load
